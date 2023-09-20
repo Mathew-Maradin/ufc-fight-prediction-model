@@ -5,6 +5,8 @@ import pandas as pd
 import openpyxl
 from halo import Halo
 from spinners import Spinners
+from openpyxl import load_workbook
+from fractions import Fraction
 
 #Creating blank excel files with headers 
 def create_excel_file():
@@ -100,22 +102,73 @@ def get_fight_links(event_url):
     return(fight_links)
 
 def get_fight_data(link):
-    ##Get data from each fights link and fill in according to headers  
-    data = []
+    fight_data = []
 
     response = requests.get(link)
     doc = BeautifulSoup(response.text, "html.parser")
 
-    ## Preprocess data, convert fractions to decimals, strings to binary and maybe drop referees??
+    tables = doc.findAll('table')
+    total_table = tables[0]
 
-    print(link)
-    return 0 
+    data = total_table.findAll("p", {"class": "b-fight-details__table-text"})
+    for i in data:
+        i = i.getText().strip()
+        try:
+            frac = i.split(" of ")
+            fraction = float(frac[0])/float(frac[1])
+            fight_data.append(fraction)
+        except:
+            fight_data.append(i)
+
+
+    specific_strikes_table = tables[2]
+    strike_data = specific_strikes_table.findAll("p", {"class": "b-fight-details__table-text"})
+    strike_data = strike_data[6:]
+    for i in strike_data:
+        i = i.getText().strip()
+        try:
+            frac = i.split(" of ")
+            fraction = float(frac[0])/float(frac[1])
+            fight_data.append(fraction)
+        except:
+            fight_data.append(i)
+
+    # fight_details = doc.find("div",{"class": "b-fight-details__fight"})
+    # details = fight_details.findAll("i")
+    # details = [details[3].getText().strip(), details[4].getText().split(":")[1].strip(), details[6].getText().split(":",1)[1].strip(),
+    #             details[8].getText().split(":")[1].strip(), details[10].getText().split(":")[1].strip()]
+    
+    # for i in details:
+    #     fight_data.append(i)
+    
+    # data = doc.find("div", {"class": "b-fight-details__persons clearfix"})
+    # data = data.findAll("div", {"class": "b-fight-details__person"})
+
+    # for div in data:
+    #     i_element = div.find('i', class_='b-fight-details__person-status b-fight-details__person-status_style_green')
+    #     p_element = div.find('a')
+    #     try:
+    #         if (str(i_element.getText().strip()) == "W"):
+    #             fight_data.append(str(p_element.getText().strip()))
+    #     except:
+    #         continue
+                
+    return fight_data 
 
 def add_data_to_excel(data):
-    return 0
+    wb = load_workbook("../data/completed_fights.xlsx")
+    page = wb.active
+    page.append(data)
 
 def __init__():
     start_time = time.time()
+
+    master_df = pd.DataFrame(columns=['R_fighter','B_fighter','R_KD','B_KD','R_SIG_STR.','B_SIG_STR.','R_SIG_STR_pct','B_SIG_STR_pct',
+                                      'R_TOTAL_STR.','B_TOTAL_STR.','R_TD','B_TD','R_TD_pct','B_TD_pct','R_SUB_ATT','B_SUB_ATT','R_REV',
+                                      'B_REV','R_CTRL','B_CTRL','R_HEAD','B_HEAD','R_BODY','B_BODY','R_LEG','B_LEG','R_DISTANCE','B_DISTANCE',
+                                      'R_CLINCH','B_CLINCH','R_GROUND','B_GROUND','win_by','last_round','last_round_time','Format','Referee',
+                                      'date','location','Fight_type','Winner'])
+    print(master_df)
 
     spinner = Halo(text='Creating Excel Files', spinner='dots')
     spinner.start()
@@ -129,19 +182,20 @@ def __init__():
     event_list = links[1]
     spinner.stop()
 
-    spinner = Halo(text='Fetching fight links for each fight!', spinner='dots')
-    spinner.start()
+    # spinner = Halo(text='Fetching fight links for each fight!', spinner='dots')
+    # spinner.start()
     for event in event_list:
         fight_links = get_fight_links(event)
         # print("The following fights occured during the following event: " + event)
         # print(fight_links)
 
-        # for link in fight_links:
-        #     print(1)
-        #     data = get_fight_data(link)
-        #     break
+        for link in fight_links:
+            data = get_fight_data(link)
+            print(data)
+            # master_df.concat(data)
         # break
-    spinner.stop()
+    print(master_df)
+    # spinner.stop()
 
     end_time = time.time()
     elapsed_time = end_time - start_time
