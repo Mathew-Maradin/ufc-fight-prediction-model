@@ -176,7 +176,7 @@ def predictEvent(model, fighter_avgs, feature_columns):
 
 
 
-def __init__():
+if __name__ == "__main__":
     print("Preprocessing data")
     X, y = loadDF()
 
@@ -190,6 +190,3 @@ def __init__():
     feature_columns = X.columns
 
     predictEvent(rf_model, fighter_avgs, feature_columns)
-
-
-__init__()

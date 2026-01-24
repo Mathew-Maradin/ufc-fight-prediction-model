@@ -1,33 +1,35 @@
 # UFC-AI-Fight-Predictor
 
-This project aims to collect UFC fight data from a popular website, prepare it using Python, and then run it through a decision tree AI to predict the outcomes of future fights.
+### Project Overview
 
-Getting Started
-To get started, you will need to have Python 3.x installed on your computer. You can download it from the official Python website: https://www.python.org/downloads/
+This project aims to bridge the gap between historical sports data and predictive analytics. By collecting raw UFC fight data from comprehensive online statistics, the system prepares high-dimensional athlete data to be processed by a Decision Tree AI. The goal is to identify patterns in fighter performance and use them to predict the outcomes of future matchups with statistical accuracy.
 
-Once you have Python installed, you will need to install a few additional libraries to run this project. You can install them by running the following command in your terminal or command prompt:
-pip install requests beautifulsoup4 pandas scikit-learn
+### Preprocessing
 
-Scraping UFC Fight Data
-The first step in this project is to scrape UFC fight data from a popular website. We will be using the website https://www.ufcstats.com/ for this purpose.
+**Data Pipeline:**
 
-The scraper is located in the ufc_scraper.py file. To use it, simply run the file using Python:
-python ufc_scraper.py
-This will scrape the data and save it to a CSV file named ufc_fight_data.csv.
+* **Scraping:** Raw data is harvested from `ufcstats.com` using a custom scraper. This includes historical fight results, significant strike percentages, takedown accuracy, and physical attributes like reach and height.
+* **Cleaning:** The raw CSV is processed to handle missing values, normalize fighter names, and convert categorical outcomes (e.g., "Decision - Unanimous", "KO/TKO") into numerical labels suitable for machine learning.
+* **Feature Engineering:** Converts raw fight-by-fight stats into rolling averages or win-loss ratios to represent a fighter's current "form" rather than just their historical total.
 
-Preparing UFC Fight Data
-Once we have scraped the data, we need to prepare it for use with the decision tree AI. This involves cleaning the data and converting it into a format that can be used by the AI.
+### Models & Results
 
-The data preparation code is located in the ufc_data_prep.py file. To use it, simply run the file using Python:
-python ufc_data_prep.py
-This will load the data from ufc_fight_data.csv, clean it, and save it to a new CSV file named ufc_fight_data_cleaned.csv.
+**1. Data Collection Scraper**
 
-Running UFC Fight Data Through a Decision Tree AI
-The final step in this project is to run the cleaned data through a decision tree AI to predict the outcomes of future fights.
+* **Logic:** Utilizes `requests` and `BeautifulSoup4` to navigate the hierarchical structure of UFC event pages and individual bout details.
+* **Output:** A comprehensive `ufc_fight_data.csv` file containing the foundational training data.
 
-The decision tree AI code is located in the ufc_decision_tree.py file. To use it, simply run the file using Python:
-python ufc_decision_tree.py
-This will load the cleaned data from ufc_fight_data_cleaned.csv, train the decision tree AI, and then use it to predict the outcomes of future fights.
+**2. Data Preparation Module**
 
-Conclusion
-This project demonstrates how to scrape UFC fight data from a website, prepare it using Python, and then run it through a decision tree AI to predict the outcomes of future fights. With some modifications, this approach can be applied to other sports and prediction tasks.
+* **Logic:** Employs `pandas` to transform qualitative fight summaries into quantitative feature vectors.
+* **Insight:** This step is crucial for the Decision Tree, as it reduces noise and ensures that features like "Reach Advantage" are explicitly calculated for the model to weigh.
+
+**3. Decision Tree Classifier**
+
+* **Architecture:** Implemented via `scikit-learn`, the model splits fighter data based on the most statistically significant features (e.g., Strike Accuracy vs. Takedown Defense).
+* **Pros:** Highly interpretable; the resulting "tree" allows users to see exactly which metrics (like a 5-inch reach advantage) most heavily influenced the predicted win.
+* **Result:** After training on `ufc_fight_data_cleaned.csv`, the AI evaluates upcoming bouts to generate a probability-based prediction of the winner.
+
+### Conclusion
+
+This project demonstrates the full lifecycle of a sports analytics tool, from web scraping to predictive modeling. The use of a Decision Tree provides a transparent view into the "logic" of a fight, suggesting that certain physical and technical advantages are reliable predictors of victory. Future iterations could involve expanding this to Random Forests or Gradient Boosting models to further refine accuracy across diverse weight classes.

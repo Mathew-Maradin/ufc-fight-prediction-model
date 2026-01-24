@@ -1,3 +1,4 @@
+import re
 from bs4 import BeautifulSoup
 import time
 import requests
@@ -8,9 +9,8 @@ from spinners import Spinners
 from openpyxl import load_workbook
 from fractions import Fraction
 
-#Creating blank excel files with headers 
-def create_excel_file():
-
+# Create base excel files for data to populate
+def create_excel_file() -> None:
     workbook_upcoming = openpyxl.Workbook()
     sheet = workbook_upcoming.active
     sheet['A1'] = 'R_fighter'
@@ -58,14 +58,15 @@ def create_excel_file():
     sheet['AI1'] = 'last_round_time'
     sheet['AJ1'] = 'Format'
     sheet['AK1'] = 'Referee'
-    sheet['AL1'] = 'date'
-    sheet['AM1'] = 'location'
-    sheet['AN1'] = 'Fight_type'
-    sheet['AO1'] = 'Winner'
+    sheet['AL1'] = 'Details'
+    sheet['AM1'] = 'date'
+    sheet['AN1'] = 'location'
+    sheet['AO1'] = 'Fight_type'
+    sheet['AP1'] = 'Winner'
     workbook_completed.save('../data/completed_fights.xlsx')
 
-##Returns a array with two objects, first a link of the upcoming event and an array of all completed events 
-def get_event_links():
+# Extract links for past events and soonest upcoming event
+def get_event_links() -> list[str,list[str]]:
     event_list = []
     url = "http://www.ufcstats.com/statistics/events/completed?page=all"
 
@@ -84,8 +85,44 @@ def get_event_links():
 
     return [upcoming_event, event_list]
 
-##Takes in a link and returns an array of each fight that occured during that event
-def get_fight_links(event_url):
+# Extract matchups for upcoming fight card
+def get_upcoming_fights(link) -> list[list[str], list[str]]:
+    fights = []
+
+    response = requests.get(link)
+    doc = BeautifulSoup(response.text, "html.parser")
+
+    data = doc.find("tbody")
+    fights = data.find_all("a", {"class": "b-link b-link_style_black"})
+
+    current_fight = []
+    for fight in fights:
+        curr_fight = fight.text.strip()
+        current_fight.append(curr_fight)
+
+    paired_fights = []
+    current_pair = []
+
+    for name in current_fight:
+        if name == "View Matchup":
+            if current_pair:
+                paired_fights.append(current_pair)
+                current_pair = []
+        else:
+            current_pair.append(name)
+
+  
+    box = doc.find("ul")
+    event_data = box.find_all('li', {"class":'b-list__box-list-item'})
+    event = []
+
+    for i in event_data:
+        data = i.get_text(strip=True)
+        event.append(data.split(":")[1])
+    
+    return [paired_fights, event]
+
+def get_fight_links(event_url) -> list[list[str], list[str]]:
     fight_links = []
 
     response = requests.get(event_url)
@@ -99,106 +136,202 @@ def get_fight_links(event_url):
         link = fight.get('data-link')
         fight_links.append(link)
     
-    return(fight_links)
+    box = doc.find("ul")
+    event_data = box.find_all('li', {"class":'b-list__box-list-item'})
+    event = []
 
-def get_fight_data(link):
+    for i in event_data:
+        data = i.get_text(strip=True)
+        event.append(data.split(":")[1])
+
+
+    return [fight_links, event]
+
+def get_fight_data(link, event_data):
     fight_data = []
 
     response = requests.get(link)
     doc = BeautifulSoup(response.text, "html.parser")
 
-    tables = doc.findAll('table')
-    total_table = tables[0]
+    tables = doc.find_all('table')
 
-    data = total_table.findAll("p", {"class": "b-fight-details__table-text"})
+    try:
+        total_table = tables[0]
+    except:
+        return []
+    
+    data = total_table.find_all("p", {"class": "b-fight-details__table-text"})
     for i in data:
         i = i.getText().strip()
-        try:
+
+        if "of" in i:
             frac = i.split(" of ")
-            fraction = float(frac[0])/float(frac[1])
+            try: 
+                fraction = float(frac[0])/float(frac[1])
+            except:
+                fraction = 0
             fight_data.append(fraction)
-        except:
+        elif "%" in i:
+            fight_data.append(i.replace("%", ""))
+        elif "-" in i:
+            fight_data.append(0)
+        elif ":" in i:
+            
+            time = i.split(":")
+            digits = "".join(time)
+
+            pos = 1
+            seconds = 0
+
+            for digit in reversed(digits):
+                seconds += (pos * int(digit))
+
+                if pos == 0:
+                    pos = 10
+                elif pos == 10:
+                    pos = 60
+                else: 
+                    pos = 600
+            
+            fight_data.append(seconds)
+        else:
             fight_data.append(i)
 
-
     specific_strikes_table = tables[2]
-    strike_data = specific_strikes_table.findAll("p", {"class": "b-fight-details__table-text"})
+    strike_data = specific_strikes_table.find_all("p", {"class": "b-fight-details__table-text"})
     strike_data = strike_data[6:]
     for i in strike_data:
         i = i.getText().strip()
-        try:
+        if "of" in i:
+            frac = i.split(" of ")
+            try: 
+                fraction = float(frac[0])/float(frac[1])
+            except:
+                fraction = 0
+            fight_data.append(fraction)
+
+        else:
+            fight_data.append(i)
+
+    time_pattern = re.compile(r'\b\d{1,2}:\d{2}\b') ###FIX DECISION DATE HERE
+    bout_data = doc.find('div', {"class": "b-fight-details__content"})
+
+    curr_data = []
+    for string in bout_data.stripped_strings:
+        if "of" in string:
             frac = i.split(" of ")
             fraction = float(frac[0])/float(frac[1])
             fight_data.append(fraction)
-        except:
-            fight_data.append(i)
 
-    # fight_details = doc.find("div",{"class": "b-fight-details__fight"})
-    # details = fight_details.findAll("i")
-    # details = [details[3].getText().strip(), details[4].getText().split(":")[1].strip(), details[6].getText().split(":",1)[1].strip(),
-    #             details[8].getText().split(":")[1].strip(), details[10].getText().split(":")[1].strip()]
+        elif ":" not in string or time_pattern.match(string):
+            curr_data.append(string)
+        
+    tempdata = []
+    if len(curr_data) > 6:
+        tempdata = curr_data[:5]
+        tempdata.append(tempdata[0])
+
+    else:
+        tempdata = curr_data
+
+    fight_data = fight_data + tempdata
+
+    fight_data.append(event_data[0])
+    fight_data.append(event_data[1])
+
+    fight_type = doc.find('i', {"class": "b-fight-details__fight-title"})
+    for i in fight_type.stripped_strings:
+        fight_data.append(i)
     
-    # for i in details:
-    #     fight_data.append(i)
+    try:
+        fighter = doc.find('i', {"class": "b-fight-details__person-status b-fight-details__person-status_style_green"})
+        fightname = fighter.find_next_sibling("div")
+        fighter = fightname.find("a", {"class":"b-link b-fight-details__person-link"})
+        fight_data.append(fighter.text)
+    except:
+        fight_data.append("")
+
+    return fight_data
+
+def add_data_to_excel(data, type) -> None:
+    if type == "completed":
+        wb = load_workbook("../data/completed_fights.xlsx")
+        sheet = wb.active
+        
+        for row_data in data:
+            sheet.append(row_data)
+
+        wb.save("../data/completed_fights.xlsx")
+    else:
+        wb = load_workbook("../data/upcoming_fights.xlsx")
+        sheet = wb.active
+        
+        for row_data in data:
+            sheet.append(row_data)
+
+        wb.save("../data/upcoming_fights.xlsx")
+
+def fetch_fight_data(link_event_tuple):
+    link, event_data = link_event_tuple
+    print(event_data)
+    try:
+        data = get_fight_data(link, event_data)
+        print(data)
+        return data
+    except Exception as e:
+        print(f"Error fetching {link}: {e}")
+        return []
     
-    # data = doc.find("div", {"class": "b-fight-details__persons clearfix"})
-    # data = data.findAll("div", {"class": "b-fight-details__person"})
 
-    # for div in data:
-    #     i_element = div.find('i', class_='b-fight-details__person-status b-fight-details__person-status_style_green')
-    #     p_element = div.find('a')
-    #     try:
-    #         if (str(i_element.getText().strip()) == "W"):
-    #             fight_data.append(str(p_element.getText().strip()))
-    #     except:
-    #         continue
-                
-    return fight_data 
-
-def add_data_to_excel(data):
-    wb = load_workbook("../data/completed_fights.xlsx")
-    page = wb.active
-    page.append(data)
-
-def __init__():
+if __name__ == "__main__":
+    # ---------------CREATING EXCEL FILES------------------------ 
     start_time = time.time()
-
-    master_df = pd.DataFrame(columns=['R_fighter','B_fighter','R_KD','B_KD','R_SIG_STR.','B_SIG_STR.','R_SIG_STR_pct','B_SIG_STR_pct',
-                                      'R_TOTAL_STR.','B_TOTAL_STR.','R_TD','B_TD','R_TD_pct','B_TD_pct','R_SUB_ATT','B_SUB_ATT','R_REV',
-                                      'B_REV','R_CTRL','B_CTRL','R_HEAD','B_HEAD','R_BODY','B_BODY','R_LEG','B_LEG','R_DISTANCE','B_DISTANCE',
-                                      'R_CLINCH','B_CLINCH','R_GROUND','B_GROUND','win_by','last_round','last_round_time','Format','Referee',
-                                      'date','location','Fight_type','Winner'])
-    print(master_df)
-
     spinner = Halo(text='Creating Excel Files', spinner='dots')
     spinner.start()
     create_excel_file() 
     spinner.stop() 
 
+    # ---------------FETCHING EVENT LINKS------------------------ 
     spinner = Halo(text='Fetching links for each event!', spinner='dots')
     spinner.start()
-    links = get_event_links()
-    upcoming_event = links[0]
-    event_list = links[1]
+    upcoming_event_link, past_event_links = get_event_links()
     spinner.stop()
 
-    # spinner = Halo(text='Fetching fight links for each fight!', spinner='dots')
-    # spinner.start()
-    for event in event_list:
-        fight_links = get_fight_links(event)
-        # print("The following fights occured during the following event: " + event)
-        # print(fight_links)
+    # ---------------UPCOMING FIGHT DATA------------------------ 
+    spinner = Halo(text='Fetching upcoming fights', spinner='dots')
+    spinner.start()
+    upcoming_fights, event_data = get_upcoming_fights(upcoming_event_link)
+
+    for i in range(len(upcoming_fights)):
+        upcoming_fights[i].append(event_data[0])
+        upcoming_fights[i].append(event_data[1])
+        
+    add_data_to_excel(upcoming_fights, "upcoming")
+    spinner.stop()
+
+    # ---------------EXISTING FIGHT DATA-------------------------- 
+    spinner = Halo(text='Fetching past fight data', spinner='dots')
+    spinner.start()
+
+    bulk_fight_data = []
+    for evnet_link in past_event_links:
+        fight_links, event_data = get_fight_links(evnet_link)
 
         for link in fight_links:
-            data = get_fight_data(link)
-            print(data)
-            # master_df.concat(data)
-        # break
-    print(master_df)
-    # spinner.stop()
+            print(link)
+            data = get_fight_data(link, event_data)
+            bulk_fight_data.append(data)
+            
+            for info in data:
+                print(info)
+            break
+        break
 
-    end_time = time.time()
-    elapsed_time = end_time - start_time
-    print(f"Elapsed time: {elapsed_time} seconds")
+#     # add_data_to_excel(bulk_fight_data, "completed")
 
-__init__()
+#     spinner.stop()
+#     end_time = time.time()
+#     elapsed_time = end_time - start_time
+#     print(f"Elapsed time: {elapsed_time} seconds")
+    
+    print(bulk_fight_data)
