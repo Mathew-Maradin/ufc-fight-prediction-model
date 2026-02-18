@@ -7,7 +7,7 @@ import openpyxl
 from halo import Halo
 from spinners import Spinners
 from openpyxl import load_workbook
-from fractions import Fraction
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Create base excel files for data to populate
 def create_excel_file() -> None:
@@ -17,7 +17,7 @@ def create_excel_file() -> None:
     sheet['B1'] = 'B_fighter'
     sheet['C1'] = 'Date'
     sheet['D1'] = 'Location'
-    workbook_upcoming.save('../data/upcoming_fights.xlsx')
+    workbook_upcoming.save('upcoming_fights.xlsx')
 
     workbook_completed = openpyxl.Workbook()
     sheet = workbook_completed.active
@@ -25,12 +25,12 @@ def create_excel_file() -> None:
     sheet['B1'] = 'B_fighter'
     sheet['C1'] = 'R_KD'
     sheet['D1'] = 'B_KD'
-    sheet['E1'] = 'R_SIG_STR.'
-    sheet['F1'] = 'B_SIG_STR.'
+    sheet['E1'] = 'R_SIG_STR'
+    sheet['F1'] = 'B_SIG_STR'
     sheet['G1'] = 'R_SIG_STR_pct'
     sheet['H1'] = 'B_SIG_STR_pct'
-    sheet['I1'] = 'R_TOTAL_STR.'
-    sheet['J1'] = 'B_TOTAL_STR.'
+    sheet['I1'] = 'R_TOTAL_STR'
+    sheet['J1'] = 'B_TOTAL_STR'
     sheet['K1'] = 'R_TD'
     sheet['L1'] = 'B_TD'
     sheet['M1'] = 'R_TD_pct'
@@ -63,7 +63,7 @@ def create_excel_file() -> None:
     sheet['AN1'] = 'location'
     sheet['AO1'] = 'Fight_type'
     sheet['AP1'] = 'Winner'
-    workbook_completed.save('../data/completed_fights.xlsx')
+    workbook_completed.save('completed_fights.xlsx')
 
 # Extract links for past events and soonest upcoming event
 def get_event_links() -> list[str,list[str]]:
@@ -170,10 +170,10 @@ def get_fight_data(link, event_data):
                 fraction = float(frac[0])/float(frac[1])
             except:
                 fraction = 0
-            fight_data.append(fraction)
+            fight_data.append(float(fraction))
         elif "%" in i:
-            fight_data.append(i.replace("%", ""))
-        elif "-" in i:
+            fight_data.append(float(i.replace("%", "").strip()))
+        elif "-" in i and (len(fight_data) > 2):
             fight_data.append(0)
         elif ":" in i:
             
@@ -195,7 +195,10 @@ def get_fight_data(link, event_data):
             
             fight_data.append(seconds)
         else:
-            fight_data.append(i)
+            try: 
+                fight_data.append(float(i))
+            except:
+                fight_data.append(i)
 
     specific_strikes_table = tables[2]
     strike_data = specific_strikes_table.find_all("p", {"class": "b-fight-details__table-text"})
@@ -208,10 +211,10 @@ def get_fight_data(link, event_data):
                 fraction = float(frac[0])/float(frac[1])
             except:
                 fraction = 0
-            fight_data.append(fraction)
+            fight_data.append(float(fraction))
 
         else:
-            fight_data.append(i)
+            fight_data.append(float(i))
 
     time_pattern = re.compile(r'\b\d{1,2}:\d{2}\b') ###FIX DECISION DATE HERE
     bout_data = doc.find('div', {"class": "b-fight-details__content"})
@@ -219,21 +222,28 @@ def get_fight_data(link, event_data):
     curr_data = []
     for string in bout_data.stripped_strings:
         if "of" in string:
-            frac = i.split(" of ")
-            fraction = float(frac[0])/float(frac[1])
-            fight_data.append(fraction)
+            try: 
+                frac = i.split(" of ")
+                fraction = float(frac[0])/float(frac[1])
+                fight_data.append(fraction)
+            except:
+                fight_data.append(0)
 
         elif ":" not in string or time_pattern.match(string):
             curr_data.append(string)
         
     tempdata = []
     if len(curr_data) > 6:
-        tempdata = curr_data[:5]
-        tempdata.append(tempdata[0])
-
+        try:
+            tempdata = curr_data[:5]
+            tempdata.append(float(tempdata[0]))
+        except:
+            tempdata = curr_data[:5]
+            tempdata.append(tempdata[0])
     else:
         tempdata = curr_data
-
+    
+    tempdata[1] = int(tempdata[1])
     fight_data = fight_data + tempdata
 
     fight_data.append(event_data[0])
@@ -247,7 +257,7 @@ def get_fight_data(link, event_data):
         fighter = doc.find('i', {"class": "b-fight-details__person-status b-fight-details__person-status_style_green"})
         fightname = fighter.find_next_sibling("div")
         fighter = fightname.find("a", {"class":"b-link b-fight-details__person-link"})
-        fight_data.append(fighter.text)
+        fight_data.append(fighter.text.strip())
     except:
         fight_data.append("")
 
@@ -255,33 +265,22 @@ def get_fight_data(link, event_data):
 
 def add_data_to_excel(data, type) -> None:
     if type == "completed":
-        wb = load_workbook("../data/completed_fights.xlsx")
+        wb = load_workbook("completed_fights.xlsx")
         sheet = wb.active
         
         for row_data in data:
             sheet.append(row_data)
 
-        wb.save("../data/completed_fights.xlsx")
+        wb.save("completed_fights.xlsx")
     else:
-        wb = load_workbook("../data/upcoming_fights.xlsx")
+        wb = load_workbook("upcoming_fights.xlsx")
         sheet = wb.active
         
         for row_data in data:
             sheet.append(row_data)
 
-        wb.save("../data/upcoming_fights.xlsx")
+        wb.save("upcoming_fights.xlsx")
 
-def fetch_fight_data(link_event_tuple):
-    link, event_data = link_event_tuple
-    print(event_data)
-    try:
-        data = get_fight_data(link, event_data)
-        print(data)
-        return data
-    except Exception as e:
-        print(f"Error fetching {link}: {e}")
-        return []
-    
 
 if __name__ == "__main__":
     # ---------------CREATING EXCEL FILES------------------------ 
@@ -314,24 +313,32 @@ if __name__ == "__main__":
     spinner.start()
 
     bulk_fight_data = []
-    for evnet_link in past_event_links:
-        fight_links, event_data = get_fight_links(evnet_link)
 
-        for link in fight_links:
-            print(link)
-            data = get_fight_data(link, event_data)
-            bulk_fight_data.append(data)
-            
-            for info in data:
-                print(info)
-            break
-        break
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        count = 0
+        for event_link in past_event_links:
+            print(f" {count} events scraped!")
 
-#     # add_data_to_excel(bulk_fight_data, "completed")
+            fight_links, event_data = get_fight_links(event_link)
 
-#     spinner.stop()
-#     end_time = time.time()
-#     elapsed_time = end_time - start_time
-#     print(f"Elapsed time: {elapsed_time} seconds")
-    
-    print(bulk_fight_data)
+            futures = [
+                executor.submit(get_fight_data, link, event_data)
+                for link in fight_links
+            ]
+
+            for future in as_completed(futures):
+                try:
+                    data = future.result()
+                    if data and len(data) == 42:
+                        bulk_fight_data.append(data)
+                except Exception as e:
+                    print("Fight scrape failed:", e)
+
+            count += 1
+
+    add_data_to_excel(bulk_fight_data, "completed")
+
+    spinner.stop()
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time: {elapsed_time} seconds")
